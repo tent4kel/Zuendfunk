@@ -57,7 +57,7 @@ export function createStreamUrl(dateString: string, startTime: string): string {
   const hour = startTime.split(":")[0].padStart(2, "0");
   const midday = berlinDate(dateString, "12:00");
   const offset = berlinOffset(midday);
-  return `https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_${compact}T${hour}0000${offset}.mp4/master.m3u8`;
+  return `https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_${compact}T${hour}0000${offset}.mp4`;
 }
 
 function extractDetailLinks($: cheerio.CheerioAPI): Map<string, string> {

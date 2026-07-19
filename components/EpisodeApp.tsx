@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { Episode } from "../lib/types";
 import Player, { type PlaybackState } from "./Player";
 
@@ -11,22 +11,31 @@ type PlaybackMap = Record<string, PlaybackState>;
 
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat("de-DE", {
-    weekday: "long",
-    day: "numeric",
-    month: "long"
-  }).format(new Date(`${date}T12:00:00`));
+    weekday: "short",
+    day: "2-digit",
+    month: "short"
+  }).format(new Date(`${date}T12:00:00`)).replace(".", "");
 }
 
 function formatPosition(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function parseTime(time: string): number {
+  const [hours = "0", minutes = "0", seconds = "0"] = time.split(":");
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
 }
 
 function episodeStartOffset(startTime: string): number {
-  const [, minutes = "0", seconds = "0"] = startTime.split(":");
-  return Number(minutes) * 60 + Number(seconds);
+  return parseTime(startTime) % 3600;
+}
+
+function episodeDuration(startTime: string, endTime: string): number {
+  let duration = parseTime(endTime) - parseTime(startTime);
+  if (duration < 0) duration += 24 * 3600;
+  return duration;
 }
 
 function readPlayback(): PlaybackMap {
@@ -41,7 +50,7 @@ function writePlayback(value: PlaybackMap) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   } catch {
-    // Playback still works if storage is unavailable or blocked.
+    // Playback still works if storage is unavailable.
   }
 }
 
@@ -59,12 +68,9 @@ export default function EpisodeApp() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Unbekannter Fehler");
 
-        const currentEpisodes = data.episodes as Episode[];
+        const currentEpisodes = (data.episodes as Episode[]).slice(0, 6);
         const currentIds = new Set(currentEpisodes.map((episode) => episode.id));
-        const stored = readPlayback();
-        const cleaned = Object.fromEntries(
-          Object.entries(stored).filter(([episodeId]) => currentIds.has(episodeId))
-        );
+        const cleaned = Object.fromEntries(Object.entries(readPlayback()).filter(([id]) => currentIds.has(id)));
 
         writePlayback(cleaned);
         setPlayback(cleaned);
@@ -78,103 +84,77 @@ export default function EpisodeApp() {
   function selectAndPlay(episode: Episode) {
     setSelected(episode);
     setPlayRequest((request) => request + 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const saveProgress = useCallback((episodeId: string, position: number) => {
     setPlayback((current) => {
-      const next = {
-        ...current,
-        [episodeId]: {
-          position,
-          updatedAt: Date.now()
-        }
-      };
+      const next = { ...current, [episodeId]: { position, updatedAt: Date.now() } };
       writePlayback(next);
       return next;
     });
   }, []);
 
-  if (loading) return <p className="status">Sendungen werden geladen …</p>;
-  if (error) return <p className="status">{error}</p>;
-  if (!selected) {
-    return (
-      <p className="status">
-        Keine Sendungen gefunden. Öffne <code>/api/episodes</code>, um die API-Antwort zu prüfen.
-      </p>
-    );
-  }
+  if (loading) return <div className="status">Sendungen werden geladen …</div>;
+  if (error) return <div className="status">{error}</div>;
+  if (!selected) return <div className="status">Keine Sendungen gefunden.</div>;
 
-  const startOffsetSeconds = episodeStartOffset(selected.startTime);
+  const selectedDuration = episodeDuration(selected.startTime, selected.endTime);
   const resumePosition = playback[selected.id]?.position ?? 0;
 
   return (
-    <>
-      <section className="hero">
-        <div className="artwork">
-          {selected.imageUrl ? (
-            <img src={selected.imageUrl} alt="" />
-          ) : (
-            <div className="fallback">ZÜNDFUNK</div>
-          )}
-        </div>
-        <div className="heroCopy">
-          <p className="eyebrow">
-            {formatDate(selected.date)} · {selected.startTime}–{selected.endTime} Uhr
-          </p>
-          <h1>{selected.title}</h1>
-          {selected.presenters && <p className="presenters">Mit {selected.presenters}</p>}
-          {selected.description && <p className="description">{selected.description}</p>}
-          {resumePosition >= MIN_RESUME_SECONDS && (
-            <p className="resumeNote">
-              Wird bei {formatPosition(Math.max(0, resumePosition - 5))} fortgesetzt
-            </p>
-          )}
-          <Player
-            key={selected.streamUrl}
-            src={selected.streamUrl}
-            episodeId={selected.id}
-            startOffsetSeconds={startOffsetSeconds}
-            resumePositionSeconds={resumePosition}
-            playRequest={playRequest}
-            onProgress={(position) => saveProgress(selected.id, position)}
-          />
-          <p className="note">
-            Der Stundenstream springt automatisch zur tatsächlichen Startzeit um {selected.startTime} Uhr.
-          </p>
-        </div>
-      </section>
+    <div className="appGrid">
+      <section className="episodeGrid" aria-label="Letzte Sendungen">
+        {episodes.map((episode) => {
+          const savedPosition = playback[episode.id]?.position ?? 0;
+          const duration = episodeDuration(episode.startTime, episode.endTime);
+          const hasResume = savedPosition >= MIN_RESUME_SECONDS && savedPosition < duration - 30;
+          const isFinished = duration > 0 && savedPosition >= duration - 30;
+          const progress = duration > 0 ? Math.min(100, (savedPosition / duration) * 100) : 0;
 
-      <section className="listSection">
-        <h2>Letzte Sendungen</h2>
-        <div className="episodeList">
-          {episodes.map((episode) => {
-            const savedPosition = playback[episode.id]?.position ?? 0;
-            const hasResume = savedPosition >= MIN_RESUME_SECONDS;
-
-            return (
-              <button
-                type="button"
-                key={episode.id}
-                className={`episode ${selected.id === episode.id ? "active" : ""}`}
-                onClick={() => selectAndPlay(episode)}
-                aria-label={`${episode.title} ${hasResume ? "fortsetzen" : "abspielen"}`}
-              >
-                <span className="episodeDate">
-                  {formatDate(episode.date)} · {episode.startTime}
+          return (
+            <button
+              type="button"
+              key={episode.id}
+              className={`episodeCard ${selected.id === episode.id ? "active" : ""}`}
+              onClick={() => selectAndPlay(episode)}
+              aria-label={`${episode.title} ${hasResume ? "fortsetzen" : "abspielen"}`}
+            >
+              <span className="episodeMeta">{formatDate(episode.date)} · {episode.startTime}</span>
+              <span className="episodeTitle">{episode.title}</span>
+              {episode.presenters ? <span className="episodePresenters">{episode.presenters}</span> : null}
+              <span className="episodeFooter">
+                <span className="episodeFooterStatus">
+                  {isFinished ? "abgespielt" : ""}
                 </span>
-                <span className="episodeTitle">{episode.title}</span>
-                {hasResume && (
-                  <span className="episodeResume">
-                    Weiter bei {formatPosition(Math.max(0, savedPosition - 5))}
-                  </span>
-                )}
-                <span className="play" aria-hidden="true">▶</span>
-              </button>
-            );
-          })}
-        </div>
+              </span>
+              {(hasResume || isFinished) && <span className="cardProgress" style={{ "--progress": progress } as CSSProperties} />}
+            </button>
+          );
+        })}
       </section>
-    </>
+
+      <section className="playerPanel" aria-label="Player">
+        <div className="playerIdentity">
+          <div className="playerArtwork">
+            {selected.imageUrl ? <img src={selected.imageUrl} alt="" /> : <span>Z</span>}
+          </div>
+          <div className="playerCopy">
+            <span className="nowPlaying">Wiedergabe</span>
+            <h1>{selected.title}</h1>
+            <p>{formatDate(selected.date)} · {selected.startTime}–{selected.endTime}</p>
+          </div>
+        </div>
+        <Player
+          key={selected.streamUrl}
+          src={selected.streamUrl}
+          episodeId={selected.id}
+          startOffsetSeconds={episodeStartOffset(selected.startTime)}
+          resumePositionSeconds={resumePosition}
+          episodeDurationSeconds={selectedDuration}
+          playRequest={playRequest}
+          onProgress={(position) => saveProgress(selected.id, position)}
+        />
+      </section>
+    </div>
   );
 }

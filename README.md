@@ -1,6 +1,6 @@
 # Zündfunk Direkt
 
-Minimaler Next.js/Vercel-Player für die neuesten Zündfunk-Sendungen.
+Minimaler, bildschirmfüllender Next.js/Vercel-Player für die neuesten Zündfunk-Sendungen.
 
 ## Lokal starten
 
@@ -40,3 +40,13 @@ BR archive URLs represent complete hourly streams. The app uses the real schedul
 ## Playback resume
 
 Playback progress is stored locally in the browser. Clicking an episode resumes five seconds before the last saved position. Progress entries are automatically removed when an episode is no longer present in BR's current episode list.
+
+
+## Interface
+
+- Maximal sechs Sendungen in einem 2 × 3 Raster
+- Großer, dauerhaft sichtbarer Player ohne Seitennavigation
+- Eigene Play/Pause- und Sprungsteuerung
+- Fortschrittsanzeige und automatisches Fortsetzen
+- Disclaimer und BR-Link im Info-Dialog
+- Auf normalen Desktop- und Smartphone-Displays ohne Scrollen ausgelegt
