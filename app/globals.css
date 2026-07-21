@@ -1,0 +1,279 @@
+:root {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #171719;
+  --surface-active: #222225;
+  --text: #f6f6f3;
+  --muted: #929297;
+  --accent: #1814ff;
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-outfit), Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button, input { font: inherit; }
+button {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+button:focus,
+button:focus-visible {
+  outline: none;
+}
+
+.shell {
+  width: min(1180px, calc(100% - 24px));
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 auto;
+  padding: 12px 0 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.header {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand span { color: var(--accent); font-size: clamp(1.25rem, 2vw, 1.8rem); font-weight: 900; letter-spacing: .035em; }
+.brand small { font-size: .68rem; font-weight: 800; letter-spacing: .24em; }
+.infoButton, .modalClose {
+  border: 0px solid #4b4b50;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+.infoButton { width: 34px; height: 34px; border-radius: 50%; font-family: Georgia, serif; font-size: 1.15rem; font-weight: 700; }
+
+.appGrid {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.episodeGrid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.episodeCard {
+  --progress: 0%;
+  position: relative;
+  overflow: hidden;
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: clamp(7px, 1.1vh, 12px) clamp(14px, 2vw, 24px) 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  cursor: pointer;
+  transition: none;
+}
+.episodeCard:hover,
+.episodeCard:active {
+  background: var(--surface);
+  transform: none;
+}
+.episodeCard.active { background: var(--surface-active); }
+.episodeCard.active .cardProgress::after {
+  background: linear-gradient(90deg, var(--surface-active, .2) 0%, var(--accent, .95) 100%);
+}
+.episodeCard.finished {
+  opacity: 0.42;
+  filter: grayscale(1);
+}
+.episodeCard.finished:hover {
+  opacity: 0.65;
+  filter: grayscale(0.5);
+}
+.episodeCard.finished.active {
+  opacity: 0.75;
+  filter: grayscale(0.3);
+}
+.episodeMeta {
+  color: var(--muted);
+  font-size: clamp(.60rem, 1.1vh, .72rem);
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.episodeTitle {
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: clamp(.85rem, 1.7vh, 1.22rem);
+  line-height: 1.12;
+  letter-spacing: .02em;
+  font-weight: 650;
+}
+.episodePresenters {
+  display: block;
+  color: var(--muted);
+  font-size: clamp(.68rem, 1vh, .78rem);
+  line-height: 1.2;
+  margin-top: 1px;
+}
+.episodeFooter {
+  display: none;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: clamp(.62rem, 1vh, .74rem);
+}
+.episodeFooterStatus { min-height: 1em; }
+.cardProgress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 15px;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.cardProgress::after {
+  content: "";
+  display: block;
+  width: calc(var(--progress) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--surface,.2) 0%, var(--accent,.95) 100%);
+}
+
+.playerPanel {
+  min-height: 0;
+  border-radius: calc(var(--radius) + 2px);
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+  padding: clamp(12px, 2vh, 20px) clamp(16px, 2.5vw, 28px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr);
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
+}
+.playerIdentity { min-width: 0; display: grid; grid-template-columns: clamp(60px, 9vh, 90px) minmax(0, 1fr); align-items: center; gap: 14px; }
+.playerArtwork { aspect-ratio: 1; overflow: hidden; border-radius: 14px; background: var(--accent); color: #050505; display: grid; place-items: center; font-size: 3rem; font-weight: 1000; }
+.playerArtwork img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.playerCopy { min-width: 0; }
+.nowPlaying { color: var(--accent); font-size: .65rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.playerCopy h1 { margin: 4px 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(1.1rem, 2.2vw, 1.7rem); line-height: 1.08; letter-spacing: -.03em; }
+.playerCopy p { margin: 0; color: var(--muted); font-size: .78rem; }
+.customPlayer { min-width: 0; }
+.timelineRow { display: grid; grid-template-columns: 42px 1fr 42px; align-items: center; gap: 8px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .70rem; }
+.timelineRow span:last-child { text-align: right; }
+.timeline { width: 100%; height: 3px; accent-color: var(--accent); cursor: pointer; }
+.transport { margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: clamp(20px, 4vw, 44px); }
+.transport button {
+  color: var(--muted);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  font-size: .85rem;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  transition: none;
+}
+.transport button:not(.primaryControl):hover,
+.transport button:not(.primaryControl):active {
+  background: transparent;
+}
+.transport button small { font-size: .55rem; margin-left: -4px; }
+.transport button svg { width: 30px; height: 30px; display: block; fill: currentColor; }
+.transport .primaryControl {
+  width: 52px;
+  height: 52px;
+  background: var(--text);
+  color: #101012;
+  font-size: 0;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  transition: background-color .15s ease, transform .15s ease;
+}
+.transport .primaryControl:hover,
+.transport .primaryControl:active {
+  background: var(--text);
+  transform: none;
+}
+.transport .primaryControl .controlIcon {
+  width: 24px;
+  height: 24px;
+}
+.transport button:disabled { opacity: .35; cursor: wait; }
+
+.status { height: 100%; display: grid; place-items: center; color: var(--muted); }
+.modalBackdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.68); backdrop-filter: blur(10px); }
+.infoModal { position: relative; width: min(430px, 100%); padding: 28px; border-radius: 24px; background: #202023; box-shadow: 0 30px 100px rgba(0,0,0,.5); }
+.infoModal h2 { margin: 0 0 14px; font-size: 1.35rem; }
+.infoModal p { color: #b1b1b5; line-height: 1.45; }
+.infoModal a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.modalClose { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border-radius: 50%; font-size: 1.1rem; }
+
+@media (max-width: 760px) {
+  .shell { width: min(100% - 16px, 600px); padding: 6px 0 8px; gap: 6px; }
+  .header { min-height: 36px; }
+  .brand span { font-size: 1.2rem; }
+  .brand small { display: none; }
+  .infoButton { width: 30px; height: 30px; font-size: 1rem; }
+  .appGrid { grid-template-rows: minmax(0, 1fr) auto; gap: 6px; }
+  .episodeGrid { gap: 5px; }
+  .episodeCard { border-radius: 12px; padding: 6px 12px 9px; gap: 1px; }
+  .episodeMeta { font-size: .60rem; }
+  .episodeTitle { font-size: clamp(.75rem, 1.9vh, .9rem); line-height: 1.1; }
+  .episodePresenters { font-size: .63rem; margin-top: 0; }
+  .episodeFooter { font-size: .60rem; }
+  .cardProgress { left: 8px; right: 8px; bottom: 3px; height: 3px; }
+  .playerPanel { border-radius: 16px; padding: 10px 12px; grid-template-columns: 1fr; gap: 8px; }
+  .playerIdentity { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }
+  .playerArtwork { border-radius: 10px; font-size: 2.2rem; }
+  .playerCopy h1 { margin: 2px 0; font-size: .92rem; }
+  .playerCopy p { font-size: .68rem; }
+  .nowPlaying { font-size: .6rem; }
+  .timelineRow { font-size: .66rem; gap: 6px; grid-template-columns: 36px 1fr 36px; }
+  .transport { margin-top: 4px; gap: 24px; }
+  .transport button { width: 32px; height: 32px; }
+  .transport button svg { width: 26px; height: 26px; }
+  .transport .primaryControl { width: 42px; height: 42px; }
+  .transport .primaryControl .controlIcon { width: 20px; height: 20px; }
+}
+
+@media (max-height: 670px) {
+  .shell { padding-top: 4px; padding-bottom: 4px; gap: 4px; }
+  .header { min-height: 32px; }
+  .appGrid { gap: 4px; }
+  .episodeGrid { gap: 3px; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+  .episodeCard { padding: 5px 8px 7px; border-radius: 10px; gap: 1px; }
+  .episodeTitle { font-size: .80rem; }
+  .episodePresenters { font-size: .60rem; }
+  .playerPanel { padding: 8px 10px; }
+  .playerIdentity { grid-template-columns: 42px minmax(0, 1fr); gap: 8px; }
+  .transport { margin-top: 2px; }
+  .transport .primaryControl { width: 38px; height: 38px; }
+}
