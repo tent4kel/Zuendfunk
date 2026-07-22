@@ -209,8 +209,7 @@ export default function Player({
   return (
     <div className="customPlayer">
       <audio ref={audioRef} preload="metadata" />
-      <div className="timelineRow">
-        <span>{formatTime(position)}</span>
+      <div className="timelineGroup">
         <input
           className="timeline"
           type="range"
@@ -221,7 +220,10 @@ export default function Player({
           onChange={(event) => seek(Number(event.target.value))}
           aria-label="Wiedergabeposition"
         />
-        <span>{episodeDurationSeconds ? formatTime(episodeDurationSeconds) : "–:––"}</span>
+        <div className="timelineTimes">
+          <span>{formatTime(position)}</span>
+          <span>{episodeDurationSeconds ? formatTime(episodeDurationSeconds) : "–:––"}</span>
+        </div>
       </div>
       <div className="transport">
         <button type="button" onClick={() => skip(-15)} aria-label="15 Sekunden zurück">← 15</button>

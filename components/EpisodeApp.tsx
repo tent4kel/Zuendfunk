@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Episode } from "../lib/types";
 import Player, { type PlaybackState } from "./Player";
 
@@ -68,7 +68,7 @@ export default function EpisodeApp() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Unbekannter Fehler");
 
-        const currentEpisodes = (data.episodes as Episode[]).slice(0, 6);
+        const currentEpisodes = data.episodes as Episode[];
         const currentIds = new Set(currentEpisodes.map((episode) => episode.id));
         const cleaned = Object.fromEntries(Object.entries(readPlayback()).filter(([id]) => currentIds.has(id)));
 
@@ -98,9 +98,6 @@ export default function EpisodeApp() {
   if (error) return <div className="status">{error}</div>;
   if (!selected) return <div className="status">Keine Sendungen gefunden.</div>;
 
-  const selectedDuration = episodeDuration(selected.startTime, selected.endTime);
-  const resumePosition = playback[selected.id]?.position ?? 0;
-
   return (
     <div className="appGrid">
       <section className="episodeGrid" aria-label="Letzte Sendungen">
@@ -109,51 +106,49 @@ export default function EpisodeApp() {
           const duration = episodeDuration(episode.startTime, episode.endTime);
           const hasResume = savedPosition >= MIN_RESUME_SECONDS && savedPosition < duration - 30;
           const isFinished = duration > 0 && savedPosition >= duration - 30;
+          const isSelected = selected.id === episode.id;
           const progress = duration > 0 ? Math.min(100, (savedPosition / duration) * 100) : 0;
+          const cardStateClass = hasResume ? "resumable" : "";
 
           return (
-            <button
-              type="button"
-              key={episode.id}
-              className={`episodeCard ${selected.id === episode.id ? "active" : ""} ${isFinished ? "finished" : ""}`}
-              onClick={() => selectAndPlay(episode)}
-              aria-label={`${episode.title} ${isFinished ? "erneut abspielen" : hasResume ? "fortsetzen" : "abspielen"}`}
-            >
-              <span className="episodeMeta">{formatDate(episode.date)} · {episode.startTime}</span>
-              <span className="episodeTitle">{episode.title}</span>
-              {episode.presenters ? <span className="episodePresenters">{episode.presenters}</span> : null}
-              <span className="episodeFooter">
-                <span className="episodeFooterStatus">
-                  {hasResume ? `Weiter bei ${formatPosition(Math.max(0, savedPosition - 5))}` : ""}
-                </span>
-              </span>
-              {(hasResume || isFinished) && <span className="cardProgress" style={{ "--progress": progress } as CSSProperties} />}
-            </button>
+            <article key={episode.id} className={`episodeCard ${isSelected ? "active" : ""} ${isFinished ? "finished" : ""} ${cardStateClass}`}>
+              <button
+                type="button"
+                className="episodeHeader"
+                onClick={() => selectAndPlay(episode)}
+                aria-expanded={isSelected}
+                aria-controls={`episode-panel-${episode.id}`}
+                aria-label={`${episode.title} ${isFinished ? "erneut abspielen" : hasResume ? "fortsetzen" : "abspielen"}`}
+              >
+                <span className="episodeMeta">{formatDate(episode.date)} · {episode.startTime}</span>
+                <span className="episodeTitle">{episode.title}</span>
+                {episode.presenters ? <span className="episodePresenters">{episode.presenters}</span> : null}
+                {hasResume && !isSelected ? <span className="cardProgress" style={{ "--progress": progress } as React.CSSProperties} /> : null}
+              </button>
+
+              {isSelected ? (
+                <div id={`episode-panel-${episode.id}`} className="episodeExpanded">
+                  <div className="playerIdentity">
+                    <div className="playerArtwork">
+                      {episode.imageUrl ? <img src={episode.imageUrl} alt="" /> : <span>Z</span>}
+                    </div>
+                  </div>
+
+                  <Player
+                    key={episode.streamUrl}
+                    src={episode.streamUrl}
+                    episodeId={episode.id}
+                    startOffsetSeconds={episodeStartOffset(episode.startTime)}
+                    resumePositionSeconds={savedPosition}
+                    episodeDurationSeconds={duration}
+                    playRequest={playRequest}
+                    onProgress={(position) => saveProgress(episode.id, position)}
+                  />
+                </div>
+              ) : null}
+            </article>
           );
         })}
-      </section>
-
-      <section className="playerPanel" aria-label="Player">
-        <div className="playerIdentity">
-          <div className="playerArtwork">
-            {selected.imageUrl ? <img src={selected.imageUrl} alt="" /> : <span>Z</span>}
-          </div>
-          <div className="playerCopy">
-            <span className="nowPlaying">Wiedergabe</span>
-            <h1>{selected.title}</h1>
-            <p>{formatDate(selected.date)} · {selected.startTime}–{selected.endTime}</p>
-          </div>
-        </div>
-        <Player
-          key={selected.streamUrl}
-          src={selected.streamUrl}
-          episodeId={selected.id}
-          startOffsetSeconds={episodeStartOffset(selected.startTime)}
-          resumePositionSeconds={resumePosition}
-          episodeDurationSeconds={selectedDuration}
-          playRequest={playRequest}
-          onProgress={(position) => saveProgress(selected.id, position)}
-        />
       </section>
     </div>
   );

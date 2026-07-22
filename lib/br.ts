@@ -5,8 +5,8 @@ const BR_BASE = "https://www.br.de";
 const PROGRAMME_INDEX_URL =
   "https://www.br.de/radio/bayern2/service/programm/index.html";
 
-const DAYS_TO_SCAN = 8;
-const MAX_EPISODES = 7;
+const DAYS_TO_SCAN = 10;
+const MAX_EPISODES = 9;
 const REQUEST_TIMEOUT_MS = 12_000;
 
 function absoluteUrl(value?: string | null): string | undefined {
@@ -458,7 +458,7 @@ export async function getEpisodes(): Promise<Episode[]> {
     .filter((episode) => targetDateSet.has(episode.date))
     .filter((episode) => episode.hasAired)
     .sort((a, b) =>
-      `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`)
+      b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime)
     )
     .slice(0, MAX_EPISODES);
 }
