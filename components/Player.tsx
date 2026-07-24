@@ -1,6 +1,5 @@
 "use client";
 
-import Hls from "hls.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type PlaybackState = {
@@ -21,12 +20,25 @@ type PlayerProps = {
 const SAVE_INTERVAL_SECONDS = 5;
 const RESUME_REWIND_SECONDS = 5;
 
-function getHlsSource(source: string): string {
-  if (source.includes(".m3u8")) {
-    return source;
-  }
+function getBaseSource(source: string): string {
+  return source
+    .replace(/\/master\.m3u8(?:\?.*)?$/, "")
+    .replace(/\/$/, "");
+}
 
-  return `${source.replace(/\/$/, "")}/master.m3u8`;
+function getPlayableSource(
+  source: string,
+  audio: HTMLAudioElement
+): string {
+  const baseSource = getBaseSource(source);
+
+  const supportsNativeHls =
+    audio.canPlayType("application/vnd.apple.mpegurl") !== "" ||
+    audio.canPlayType("application/x-mpegURL") !== "";
+
+  return supportsNativeHls
+    ? `${baseSource}/master.m3u8`
+    : baseSource;
 }
 
 function formatTime(totalSeconds: number): string {
@@ -47,7 +59,6 @@ export default function Player({
   onProgress
 }: PlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
   const shouldAutoplayRef = useRef(false);
   const lastSavedSecondRef = useRef(-1);
   const initialResumeRef = useRef(resumePositionSeconds);
@@ -82,8 +93,9 @@ export default function Player({
       return;
     }
 
-    const hlsSource = getHlsSource(src);
-    const sourceKey = `${episodeId}:${hlsSource}:${startOffsetSeconds}`;
+    const playableSource = getPlayableSource(src, audio);
+    const sourceKey =
+      `${episodeId}:${playableSource}:${startOffsetSeconds}`;
     const previousSourceKey = currentSourceKeyRef.current;
 
     const targetTime =
@@ -93,12 +105,20 @@ export default function Player({
         initialResumeRef.current - RESUME_REWIND_SECONDS
       );
 
-    const seekOnceAndPlay = async () => {
+    let hasAppliedInitialSeek = false;
+
+    const applyInitialSeek = async () => {
+      if (hasAppliedInitialSeek) {
+        return;
+      }
+
+      hasAppliedInitialSeek = true;
+
       if (Number.isFinite(targetTime) && targetTime > 0) {
         try {
           audio.currentTime = targetTime;
         } catch {
-          // Some browsers only permit seeking after more media is buffered.
+          // The browser may not permit seeking until more data is loaded.
         }
       }
 
@@ -114,27 +134,38 @@ export default function Player({
       try {
         await audio.play();
       } catch {
-        // Playback can still be started with the custom play button.
+        // Playback remains available through the custom play button.
       } finally {
         shouldAutoplayRef.current = false;
       }
     };
 
-    const handleCanPlay = () => {
-      setIsReady(true);
+    const handleLoadedMetadata = () => {
+      void applyInitialSeek();
     };
 
-    const resetPreviousSource = () => {
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+    const handleCanPlay = () => {
+      setIsReady(true);
 
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      if (!hasAppliedInitialSeek) {
+        void applyInitialSeek();
+      }
+    };
+
+    const handleError = () => {
+      setIsReady(false);
+
+      console.error("Audio playback error", {
+        source: playableSource,
+        errorCode: audio.error?.code,
+        errorMessage: audio.error?.message
+      });
     };
 
     if (previousSourceKey && previousSourceKey !== sourceKey) {
-      resetPreviousSource();
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
     }
 
     setIsReady(false);
@@ -142,75 +173,25 @@ export default function Player({
     lastSavedSecondRef.current = -1;
     currentSourceKeyRef.current = sourceKey;
 
-    audio.crossOrigin = "anonymous";
     audio.preload = "auto";
+    audio.src = playableSource;
 
+    audio.addEventListener(
+      "loadedmetadata",
+      handleLoadedMetadata
+    );
     audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("error", handleError);
 
-    const supportsNativeHls =
-      audio.canPlayType("application/vnd.apple.mpegurl") !== "";
-
-    if (supportsNativeHls) {
-      audio.src = hlsSource;
-      audio.load();
-
-      audio.addEventListener(
-        "loadedmetadata",
-        seekOnceAndPlay,
-        { once: true }
-      );
-    } else if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false
-      });
-
-      hlsRef.current = hls;
-
-      hls.attachMedia(audio);
-
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        hls.loadSource(hlsSource);
-      });
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        void seekOnceAndPlay();
-      });
-
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) {
-          return;
-        }
-
-        switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            hls.startLoad();
-            break;
-
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            hls.recoverMediaError();
-            break;
-
-          default:
-            hls.destroy();
-            hlsRef.current = null;
-            setIsReady(false);
-            break;
-        }
-      });
-    } else {
-      console.error("HLS playback is not supported in this browser.");
-    }
+    audio.load();
 
     return () => {
-      audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener(
         "loadedmetadata",
-        seekOnceAndPlay
+        handleLoadedMetadata
       );
-
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("error", handleError);
     };
   }, [src, startOffsetSeconds, episodeId]);
 
@@ -329,7 +310,14 @@ export default function Player({
 
     if (audio.paused) {
       shouldAutoplayRef.current = true;
-      audio.play().catch(() => undefined);
+
+      audio.play()
+        .then(() => {
+          shouldAutoplayRef.current = false;
+        })
+        .catch(() => {
+          shouldAutoplayRef.current = false;
+        });
     } else {
       audio.pause();
     }
@@ -342,15 +330,18 @@ export default function Player({
       return;
     }
 
-    const min = startOffsetSeconds;
-    const max =
+    const minimum = startOffsetSeconds;
+
+    const maximum =
       episodeDurationSeconds > 0
         ? startOffsetSeconds + episodeDurationSeconds
         : audio.duration;
 
     audio.currentTime = Math.min(
-      Number.isFinite(max) ? max : Infinity,
-      Math.max(min, audio.currentTime + seconds)
+      Number.isFinite(maximum)
+        ? maximum
+        : Number.POSITIVE_INFINITY,
+      Math.max(minimum, audio.currentTime + seconds)
     );
   }
 
@@ -361,10 +352,18 @@ export default function Player({
       return;
     }
 
-    audio.currentTime =
-      startOffsetSeconds + positionSeconds;
+    const boundedPosition =
+      episodeDurationSeconds > 0
+        ? Math.min(
+            episodeDurationSeconds,
+            Math.max(0, positionSeconds)
+          )
+        : Math.max(0, positionSeconds);
 
-    setPosition(positionSeconds);
+    audio.currentTime =
+      startOffsetSeconds + boundedPosition;
+
+    setPosition(boundedPosition);
   }
 
   return (
@@ -391,6 +390,7 @@ export default function Player({
 
         <div className="timelineTimes">
           <span>{formatTime(position)}</span>
+
           <span>
             {episodeDurationSeconds
               ? formatTime(episodeDurationSeconds)
