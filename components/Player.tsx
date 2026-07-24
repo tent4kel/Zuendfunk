@@ -26,17 +26,27 @@ function getBaseSource(source: string): string {
     .replace(/\/$/, "");
 }
 
-function getPlayableSource(
-  source: string,
-  audio: HTMLAudioElement
-): string {
-  const baseSource = getBaseSource(source);
+function getPlayableSource(source: string): string {
+  const baseSource = source
+    .replace(/\/master\.m3u8(?:\?.*)?$/, "")
+    .replace(/\/$/, "");
 
-  const supportsNativeHls =
-    audio.canPlayType("application/vnd.apple.mpegurl") !== "" ||
-    audio.canPlayType("application/x-mpegURL") !== "";
+  if (typeof navigator === "undefined") {
+    return baseSource;
+  }
 
-  return supportsNativeHls
+  const userAgent = navigator.userAgent;
+
+  const isSafari =
+    /Safari\//.test(userAgent) &&
+    !/Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPR\//.test(userAgent);
+
+  const isIOS =
+    /iPhone|iPad|iPod/.test(userAgent) ||
+    (navigator.platform === "MacIntel" &&
+      navigator.maxTouchPoints > 1);
+
+  return isSafari || isIOS
     ? `${baseSource}/master.m3u8`
     : baseSource;
 }
@@ -93,7 +103,7 @@ export default function Player({
       return;
     }
 
-    const playableSource = getPlayableSource(src, audio);
+    const playableSource = getPlayableSource(src);
     const sourceKey =
       `${episodeId}:${playableSource}:${startOffsetSeconds}`;
     const previousSourceKey = currentSourceKeyRef.current;
