@@ -144,7 +144,6 @@ export default function Player({
 
     audio.crossOrigin = "anonymous";
     audio.preload = "auto";
-    audio.playsInline = true;
 
     audio.addEventListener("canplay", handleCanPlay);
 
