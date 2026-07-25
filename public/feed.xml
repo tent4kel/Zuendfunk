@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+
+<channel>
+
+<title>Zündfunk Direkt (Test)</title>
+<link>https://zuendfunk.vercel.app</link>
+<description>Private test feed for Zündfunk Direkt.</description>
+<language>de-DE</language>
+
+<atom:link
+  href="https://zuendfunk.vercel.app/feed.xml"
+  rel="self"
+  type="application/rss+xml"/>
+
+<itunes:author>Zündfunk Direkt</itunes:author>
+<itunes:summary>Private test feed.</itunes:summary>
+<itunes:explicit>false</itunes:explicit>
+
+<itunes:image href="https://zuendfunk.vercel.app/icon-512.png"/>
+
+<item>
+
+<title>"Keta und Krawall": Vom Umgang mit Drogen in Pop und Partykultur</title>
+
+<description>
+<![CDATA[
+Test episode generated from BR metadata.
+]]>
+</description>
+
+<link>
+https://www.br.de/radio/bayern2/programmkalender/ausstrahlung-4062476.html
+</link>
+
+<guid isPermaLink="false">
+zuendfunk-2026-07-24
+</guid>
+
+<pubDate>
+Fri, 24 Jul 2026 17:04:00 GMT
+</pubDate>
+
+<itunes:author>
+Bärbel Wossagk und Achim Bogdahn
+</itunes:author>
+
+<itunes:duration>
+56:00
+</itunes:duration>
+
+<itunes:image
+  href="https://zuendfunk.vercel.app/icon-512.png"/>
+
+<enclosure
+  url="https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_20260724T190000+0200.mp4"
+  type="audio/mp4"
+  length="1"/>
+
+</item>
+
+</channel>
+</rss>
