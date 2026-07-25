@@ -56,7 +56,7 @@ Bärbel Wossagk und Achim Bogdahn
 
 <enclosure
   url="https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_20260724T190000+0200.mp4/index.m3u8"
-  type="application/vnd.apple.mpegurl"
+  type="application/x-mpegURL"
   length="1234"
 />
 
