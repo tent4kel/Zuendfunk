@@ -55,9 +55,10 @@ Bärbel Wossagk und Achim Bogdahn
   href="https://zuendfunk.vercel.app/icon-512.png"/>
 
 <enclosure
-  url="https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_20260724T190000+0200.mp4"
-  type="audio/mp4"
-  length="1"/>
+  url="https://mcdn.hf-nh.br.de/br/hf/7t/b2/b2_20260724T190000+0200.mp4/index-a1.m3u8"
+  type="application/vnd.apple.mpegurl"
+  length="1234"
+/>
 
 </item>
 
