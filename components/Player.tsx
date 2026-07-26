@@ -1,5 +1,6 @@
 "use client";
 
+import Hls from "hls.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type PlaybackState = {
@@ -23,32 +24,12 @@ const RESUME_REWIND_SECONDS = 5;
 function getBaseSource(source: string): string {
   return source
     .replace(/\/master\.m3u8(?:\?.*)?$/, "")
+    .replace(/\/index-a1\.m3u8(?:\?.*)?$/, "")
     .replace(/\/$/, "");
 }
 
-function getPlayableSource(source: string): string {
-  const baseSource = source
-    .replace(/\/master\.m3u8(?:\?.*)?$/, "")
-    .replace(/\/$/, "");
-
-  if (typeof navigator === "undefined") {
-    return baseSource;
-  }
-
-  const userAgent = navigator.userAgent;
-
-  const isSafari =
-    /Safari\//.test(userAgent) &&
-    !/Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPR\//.test(userAgent);
-
-  const isIOS =
-    /iPhone|iPad|iPod/.test(userAgent) ||
-    (navigator.platform === "MacIntel" &&
-      navigator.maxTouchPoints > 1);
-
-  return isSafari || isIOS
-    ? `${baseSource}/master.m3u8`
-    : baseSource;
+function getMediaPlaylistSource(source: string): string {
+  return `${getBaseSource(source)}/index-a1.m3u8`;
 }
 
 function formatTime(totalSeconds: number): string {
@@ -69,6 +50,8 @@ export default function Player({
   onProgress
 }: PlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
   const shouldAutoplayRef = useRef(false);
   const lastSavedSecondRef = useRef(-1);
   const initialResumeRef = useRef(resumePositionSeconds);
@@ -88,13 +71,17 @@ export default function Player({
     onProgressRef.current = onProgress;
   }, [onProgress]);
 
+  /*
+   * Snapshot the saved resume position only when selecting another episode.
+   * Do not react to every progress-storage update.
+   */
   useEffect(() => {
     initialResumeRef.current = resumePositionSeconds;
 
     setPosition(
       Math.max(0, resumePositionSeconds - RESUME_REWIND_SECONDS)
     );
-  }, [episodeId, resumePositionSeconds]);
+  }, [episodeId]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -103,9 +90,10 @@ export default function Player({
       return;
     }
 
-    const playableSource = getPlayableSource(src);
+    const mediaPlaylistSource = getMediaPlaylistSource(src);
     const sourceKey =
-      `${episodeId}:${playableSource}:${startOffsetSeconds}`;
+      `${episodeId}:${mediaPlaylistSource}:${startOffsetSeconds}`;
+
     const previousSourceKey = currentSourceKeyRef.current;
 
     const targetTime =
@@ -116,9 +104,10 @@ export default function Player({
       );
 
     let hasAppliedInitialSeek = false;
+    let disposed = false;
 
-    const applyInitialSeek = async () => {
-      if (hasAppliedInitialSeek) {
+    const applyInitialSeekAndPlay = async () => {
+      if (disposed || hasAppliedInitialSeek) {
         return;
       }
 
@@ -128,7 +117,7 @@ export default function Player({
         try {
           audio.currentTime = targetTime;
         } catch {
-          // The browser may not permit seeking until more data is loaded.
+          // Some browsers only permit seeking once more media is available.
         }
       }
 
@@ -151,57 +140,140 @@ export default function Player({
     };
 
     const handleLoadedMetadata = () => {
-      void applyInitialSeek();
+      void applyInitialSeekAndPlay();
     };
 
     const handleCanPlay = () => {
       setIsReady(true);
 
       if (!hasAppliedInitialSeek) {
-        void applyInitialSeek();
+        void applyInitialSeekAndPlay();
       }
     };
 
-    const handleError = () => {
+    const handleAudioError = () => {
       setIsReady(false);
 
       console.error("Audio playback error", {
-        source: playableSource,
+        source: mediaPlaylistSource,
         errorCode: audio.error?.code,
         errorMessage: audio.error?.message
       });
     };
 
-    if (previousSourceKey && previousSourceKey !== sourceKey) {
+    const resetPreviousSource = () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
+    };
+
+    if (previousSourceKey && previousSourceKey !== sourceKey) {
+      resetPreviousSource();
     }
 
     setIsReady(false);
     setIsPlaying(false);
+
     lastSavedSecondRef.current = -1;
     currentSourceKeyRef.current = sourceKey;
 
     audio.preload = "auto";
-    audio.src = playableSource;
 
     audio.addEventListener(
       "loadedmetadata",
       handleLoadedMetadata
     );
     audio.addEventListener("canplay", handleCanPlay);
-    audio.addEventListener("error", handleError);
+    audio.addEventListener("error", handleAudioError);
 
-    audio.load();
+    const supportsNativeHls =
+      Boolean(
+        audio.canPlayType("application/vnd.apple.mpegurl")
+      ) ||
+      Boolean(
+        audio.canPlayType("application/x-mpegURL")
+      );
+
+    if (supportsNativeHls) {
+      /*
+       * Safari and iOS use AVFoundation’s native HLS support.
+       */
+      audio.src = mediaPlaylistSource;
+      audio.load();
+    } else if (Hls.isSupported()) {
+      /*
+       * Chrome and Firefox use hls.js to transmux the MPEG-TS/AAC
+       * segments into media fragments supported by MediaSource.
+       */
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false
+      });
+
+      hlsRef.current = hls;
+
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(mediaPlaylistSource);
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error("HLS playback error", {
+          source: mediaPlaylistSource,
+          type: data.type,
+          details: data.details,
+          fatal: data.fatal,
+          response: data.response
+        });
+
+        if (!data.fatal) {
+          return;
+        }
+
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hls.startLoad();
+            break;
+
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hls.recoverMediaError();
+            break;
+
+          default:
+            hls.destroy();
+
+            if (hlsRef.current === hls) {
+              hlsRef.current = null;
+            }
+
+            setIsReady(false);
+            break;
+        }
+      });
+
+      hls.attachMedia(audio);
+    } else {
+      setIsReady(false);
+
+      console.error(
+        "Neither native HLS nor MediaSource playback is supported."
+      );
+    }
 
     return () => {
+      disposed = true;
+
       audio.removeEventListener(
         "loadedmetadata",
         handleLoadedMetadata
       );
       audio.removeEventListener("canplay", handleCanPlay);
-      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("error", handleAudioError);
+
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
     };
   }, [src, startOffsetSeconds, episodeId]);
 
@@ -237,8 +309,12 @@ export default function Player({
         }
       }
 
-      audio.play().catch(() => undefined);
-      shouldAutoplayRef.current = false;
+      audio
+        .play()
+        .catch(() => undefined)
+        .finally(() => {
+          shouldAutoplayRef.current = false;
+        });
     }
   }, [playRequest, startOffsetSeconds]);
 
@@ -297,6 +373,7 @@ export default function Player({
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handlePause);
+
     window.addEventListener("pagehide", saveProgress);
 
     return () => {
@@ -307,6 +384,7 @@ export default function Player({
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handlePause);
+
       window.removeEventListener("pagehide", saveProgress);
     };
   }, [episodeId, startOffsetSeconds]);
@@ -321,11 +399,10 @@ export default function Player({
     if (audio.paused) {
       shouldAutoplayRef.current = true;
 
-      audio.play()
-        .then(() => {
-          shouldAutoplayRef.current = false;
-        })
-        .catch(() => {
+      audio
+        .play()
+        .catch(() => undefined)
+        .finally(() => {
           shouldAutoplayRef.current = false;
         });
     } else {
