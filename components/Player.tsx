@@ -11,6 +11,9 @@ export type PlaybackState = {
 type PlayerProps = {
   src: string;
   episodeId: string;
+  title: string;
+  artist?: string;
+  artworkUrl?: string;
   startOffsetSeconds?: number;
   resumePositionSeconds?: number;
   playRequest?: number;
@@ -43,6 +46,9 @@ function formatTime(totalSeconds: number): string {
 export default function Player({
   src,
   episodeId,
+  title,
+  artist,
+  artworkUrl,
   startOffsetSeconds = 0,
   resumePositionSeconds = 0,
   playRequest = 0,
@@ -348,6 +354,32 @@ export default function Player({
 
       setPosition(currentPosition);
 
+      if (
+        typeof navigator !== "undefined" &&
+        "mediaSession" in navigator
+      ) {
+        const duration =
+          episodeDurationSeconds > 0
+            ? episodeDurationSeconds
+            : audio.duration - startOffsetSeconds;
+
+        if (
+          Number.isFinite(duration) &&
+          duration > 0 &&
+          currentPosition <= duration
+        ) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration,
+              playbackRate: audio.playbackRate,
+              position: currentPosition
+            });
+          } catch {
+            // Position state is best-effort; ignore unsupported states.
+          }
+        }
+      }
+
       const wholeSecond = Math.floor(currentPosition);
 
       if (
@@ -387,7 +419,58 @@ export default function Player({
 
       window.removeEventListener("pagehide", saveProgress);
     };
-  }, [episodeId, startOffsetSeconds]);
+  }, [episodeId, startOffsetSeconds, episodeDurationSeconds]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title,
+      artist: artist ?? "",
+      album: "Zündfunk",
+      artwork: artworkUrl
+        ? [{ src: artworkUrl, sizes: "512x512" }]
+        : []
+    });
+  }, [episodeId, title, artist, artworkUrl]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    navigator.mediaSession.playbackState = isPlaying
+      ? "playing"
+      : "paused";
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const mediaSession = navigator.mediaSession;
+
+    mediaSession.setActionHandler("play", () => togglePlayback());
+    mediaSession.setActionHandler("pause", () => togglePlayback());
+    mediaSession.setActionHandler("seekbackward", () => skip(-15));
+    mediaSession.setActionHandler("seekforward", () => skip(30));
+    mediaSession.setActionHandler("seekto", (details) => {
+      if (typeof details.seekTime === "number") {
+        seek(details.seekTime - startOffsetSeconds);
+      }
+    });
+
+    return () => {
+      mediaSession.setActionHandler("play", null);
+      mediaSession.setActionHandler("pause", null);
+      mediaSession.setActionHandler("seekbackward", null);
+      mediaSession.setActionHandler("seekforward", null);
+      mediaSession.setActionHandler("seekto", null);
+    };
+  }, [startOffsetSeconds, episodeDurationSeconds]);
 
   function togglePlayback() {
     const audio = audioRef.current;

@@ -138,6 +138,9 @@ export default function EpisodeApp() {
                     key={episode.streamUrl}
                     src={episode.streamUrl}
                     episodeId={episode.id}
+                    title={episode.title}
+                    artist={episode.presenters}
+                    artworkUrl={episode.imageUrl}
                     startOffsetSeconds={episodeStartOffset(episode.startTime)}
                     resumePositionSeconds={savedPosition}
                     episodeDurationSeconds={duration}
