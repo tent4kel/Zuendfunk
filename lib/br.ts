@@ -85,6 +85,39 @@ function getPreviousBerlinDates(numberOfDays: number): string[] {
   });
 }
 
+function addDaysToBerlinDate(dateString: string, days: number): string {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return [
+    date.getUTCFullYear(),
+    pad2(date.getUTCMonth() + 1),
+    pad2(date.getUTCDate())
+  ].join("-");
+}
+
+// Zündfunk airs once daily around 19:04–19:05 Berlin time. There is
+// nothing new to discover before that, so the cache only needs to
+// refresh once per day, shortly after broadcast start.
+const DAILY_REFRESH_TIME = "20:00";
+
+export function secondsUntilNextRefresh(now = new Date()): number {
+  const todayDateString = getBerlinDateString(now);
+  let refreshAt = berlinDate(todayDateString, DAILY_REFRESH_TIME);
+
+  if (refreshAt.getTime() <= now.getTime()) {
+    refreshAt = berlinDate(
+      addDaysToBerlinDate(todayDateString, 1),
+      DAILY_REFRESH_TIME
+    );
+  }
+
+  return Math.max(
+    60,
+    Math.round((refreshAt.getTime() - now.getTime()) / 1000)
+  );
+}
+
 function berlinOffset(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Berlin",
@@ -125,8 +158,10 @@ export function createStreamUrl(
   );
 }
 
-async function discoverCalendarUrls(): Promise<Map<string, string>> {
-  const html = await fetchHtml(PROGRAMME_INDEX_URL, 1800);
+async function discoverCalendarUrls(
+  revalidateSeconds: number
+): Promise<Map<string, string>> {
+  const html = await fetchHtml(PROGRAMME_INDEX_URL, revalidateSeconds);
   const $ = cheerio.load(html);
   const calendars = new Map<string, string>();
 
@@ -152,9 +187,10 @@ async function discoverCalendarUrls(): Promise<Map<string, string>> {
 }
 
 async function discoverZuendfunkDetailLinks(
-  calendarUrl: string
+  calendarUrl: string,
+  revalidateSeconds: number
 ): Promise<string[]> {
-  const html = await fetchHtml(calendarUrl, 1800);
+  const html = await fetchHtml(calendarUrl, revalidateSeconds);
   const $ = cheerio.load(html);
   const links = new Set<string>();
 
@@ -411,9 +447,10 @@ async function parseDetailPage(detailUrl: string): Promise<Episode | null> {
 }
 
 export async function getEpisodes(): Promise<Episode[]> {
+  const revalidateSeconds = secondsUntilNextRefresh();
   const targetDates = getPreviousBerlinDates(DAYS_TO_SCAN);
   const targetDateSet = new Set(targetDates);
-  const calendarUrls = await discoverCalendarUrls();
+  const calendarUrls = await discoverCalendarUrls(revalidateSeconds);
 
   const calendarPages = targetDates
     .map((date) => ({ date, url: calendarUrls.get(date) }))
@@ -428,7 +465,7 @@ export async function getEpisodes(): Promise<Episode[]> {
   const detailLinkGroups = await Promise.all(
     calendarPages.map(async ({ date, url }) => {
       try {
-        return await discoverZuendfunkDetailLinks(url);
+        return await discoverZuendfunkDetailLinks(url, revalidateSeconds);
       } catch (error) {
         console.warn(`Could not read BR calendar ${date}:`, error);
         return [];
